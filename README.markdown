@@ -1,4 +1,4 @@
-# net-irc
+# Net::IRC
 
 A ruby implementation of the IRC client protocol.
 
