@@ -65,12 +65,28 @@ Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
       end
       
     when Net::IRC::Notice
-      puts highlight("Unhandled CTCP REQUEST", BOLD, fg(RED)) if message.ctcp?
-      puts highlight(message.text, fg(BLUE))
+      if message.ctcp?
+        message.ctcp.each do |req|
+          case req
+          when ''
+          else
+            puts highlight("Unhandled CTCP REQUEST: #{req}", BOLD, fg(RED))
+          end
+        end
+      end
+      puts highlight(message.text, fg(BLUE)) unless message.text.empty?
       
     when Net::IRC::Privmsg
-      puts highlight("Unhandled CTCP REQUEST", BOLD, fg(RED)) if message.ctcp?
-      puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} #{highlight(message.target, BOLD, fg(GREEN))}: #{highlight(message.text, BOLD)}"
+      if message.ctcp?
+        message.ctcp.each do |req|
+          case req
+          when ''
+          else
+            puts highlight("Unhandled CTCP REQUEST: #{req}", BOLD, fg(RED))
+          end
+        end
+      end
+      puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} #{highlight(message.target, BOLD, fg(GREEN))}: #{highlight(message.text, BOLD)}" unless message.text.empty?
       
     when Net::IRC::ErrNicknameinuse
       irc.nick message.nickname.sub(/\d*$/) { |n| n.to_i + 1 }

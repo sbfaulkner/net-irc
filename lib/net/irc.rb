@@ -181,6 +181,64 @@ module Net
       end
     end
     
+    # 250 :<text>
+    class RplStatsconn < Reply
+      def initialize(target, text)
+        super(nil, 'RPL_LSTATSCONN', target, text)
+      end
+    end
+    
+    # 251 :<text>
+    class RplLuserclient < Reply
+      def initialize(target, text)
+        super(nil, 'RPL_LUSERCLIENT', target, text)
+      end
+    end
+    
+    class ReplyWithCount < Reply
+      attr_accessor :count
+      
+      def initialize(prefix, command, target, count, text)
+        @count = count
+        super(prefix, command, target, count, text)
+      end
+    end
+    
+    # 252 <count> :<text>
+    class RplLuserop < ReplyWithCount
+      def initialize(target, count, text)
+        super(nil, 'RPL_LUSEROP', target, count, text)
+      end
+    end
+    
+    # 254 <count> :<text>
+    class RplLuserchannels < Reply
+      def initialize(target, count, text)
+        super(nil, 'RPL_LUSERCHANNELS', target, count, text)
+      end
+    end
+    
+    # 255 :<text>
+    class RplLuserme < Reply
+      def initialize(target, text)
+        super(nil, 'RPL_LUSERME', target, text)
+      end
+    end
+    
+    # 265 :<text>
+    class RplLocalusers < Reply
+      def initialize(target, text)
+        super(nil, 'RPL_LOCALUSERS', target, text)
+      end
+    end
+    
+    # 266 :<text>
+    class RplGlobalusers < Reply
+      def initialize(target, text)
+        super(nil, 'RPL_GLOBALUSERS', target, text)
+      end
+    end
+    
     # 372 <target> :- <text>
     class RplMotd < Reply
       def initialize(target, text)
