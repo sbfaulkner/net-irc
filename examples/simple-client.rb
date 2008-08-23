@@ -45,48 +45,66 @@ Net::IRC.logger.level = Logger::DEBUG
 Net::IRC.logger.datetime_format = "%Y/%m/%d %H:%M:%S"
 
 Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
-  irc.each do |event|
-    case event
+  irc.each do |message|
+    case message
     when Net::IRC::Join
-      puts "#{highlight(event.prefix.nickname, BOLD, fg(YELLOW))} joined #{highlight(event.channels.first, BOLD, fg(GREEN))}."
+      puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} joined #{highlight(message.channels.first, BOLD, fg(GREEN))}."
+      
     when Net::IRC::Part
-      if event.text && ! event.text.empty?
-        puts "#{highlight(event.prefix.nickname, BOLD, fg(YELLOW))} has left #{highlight(event.channels.first, BOLD, fg(GREEN))} (#{event.text})."
+      if message.text && ! message.text.empty?
+        puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has left #{highlight(message.channels.first, BOLD, fg(GREEN))} (#{message.text})."
       else
-        puts "#{highlight(event.prefix.nickname, BOLD, fg(YELLOW))} has left #{highlight(event.channels.first, BOLD, fg(GREEN))}."
+        puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has left #{highlight(message.channels.first, BOLD, fg(GREEN))}."
       end
+      
     when Net::IRC::Quit
-      if event.text && ! event.text.empty?
-        puts "#{highlight(event.prefix.nickname, BOLD, fg(YELLOW))} has quit (#{event.text})."
+      if message.text && ! message.text.empty?
+        puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has quit (#{message.text})."
       else
-        puts "#{highlight(event.prefix.nickname, BOLD, fg(YELLOW))} has quit."
+        puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has quit."
       end
+      
     when Net::IRC::Notice
-      puts highlight(event.text, fg(BLUE))
+      puts highlight("Unhandled CTCP REQUEST", BOLD, fg(RED)) if message.ctcp?
+      puts highlight(message.text, fg(BLUE))
+      
     when Net::IRC::Privmsg
-      puts "#{highlight(event.prefix.nickname, BOLD, fg(YELLOW))} #{highlight(event.channels.first, BOLD, fg(GREEN))}: #{highlight(event.text, BOLD)}"
+      puts highlight("Unhandled CTCP REQUEST", BOLD, fg(RED)) if message.ctcp?
+      puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} #{highlight(message.target, BOLD, fg(GREEN))}: #{highlight(message.text, BOLD)}"
+      
     when Net::IRC::ErrNicknameinuse
-      irc.nick event.nickname.sub(/\d*$/) { |n| n.to_i + 1 }
+      irc.nick message.nickname.sub(/\d*$/) { |n| n.to_i + 1 }
+      
     when Net::IRC::Error
-      puts highlight("Unhandled ERROR: #{event.class}", BOLD, fg(RED))
+      puts highlight("Unhandled ERROR: #{message.class} (#{message.command})", BOLD, fg(RED))
+      
     when Net::IRC::RplWelcome, Net::IRC::RplYourhost, Net::IRC::RplCreated
-      puts event.text
+      puts message.text
+      
     when Net::IRC::RplMyinfo
+    when Net::IRC::RplIsupport
     when Net::IRC::RplMotdstart
       puts ""
+      
     when Net::IRC::RplMotd
-      puts event.text.sub(/^- /,'')
+      puts message.text.sub(/^- /,'')
+      
     when Net::IRC::RplEndofmotd
       puts ""
       irc.join '#rubyonrails'
+      
     when Net::IRC::Reply
-      puts highlight("Unhandled REPLY: #{event.class}", BOLD, fg(RED))
+      puts highlight("Unhandled REPLY: #{message.class} (#{message.command})", BOLD, fg(RED))
+      
     when Net::IRC::Ping
-      irc.pong event.server
+      irc.pong message.server
+      
     when Net::IRC::Message
-      puts highlight("Unhandled #{event.command}", BOLD, fg(RED))
+      puts highlight("Unhandled MESSAGE: #{message.class} (#{message.command})", BOLD, fg(RED))
+      
     else
-      puts highlight("Unhandled #{event.class}", BOLD, fg(RED))
+      raise IOError, "unknown class #{message.class}"
+      
     end
   end
 end

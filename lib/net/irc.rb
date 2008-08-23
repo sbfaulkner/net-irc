@@ -22,12 +22,14 @@ module Net
     USER_MODE_INVISIBLE = 8
 
     PORT_DEFAULT = 6667
-
-    MESSAGE_NUMBERS = YAML.load_file("#{File.dirname(__FILE__)}/rfc2812.yml")
+    
+    COMMAND_MAPS = %w(rfc1459 rfc2812 isupport hybrid ircu)
 
     class Message
       attr_reader :prefix
       attr_accessor :command, :parameters
+
+      CTCP_REGEX = /\001(.*?)\001/
 
       def initialize(*args)
         raise ArgumentError, "wrong number of arguments (#{args.size} for 2)" if args.size < 2
@@ -100,35 +102,6 @@ module Net
         IRC.logger.debug ">>>>> #{line.inspect}"
         socket.writeline(line)
       end
-
-      class << self
-        def read(socket)
-          line = socket.readline.chomp
-          IRC.logger.debug "<<<<< #{line.inspect}"
-          scanner = StringScanner.new(line)
-          prefix = scanner.scan(/:([^ ]+) /) && scanner[1]
-          command = scanner.scan(/[[:alpha:]]+|\d{3}/)
-          params = []
-          14.times do
-            break if ! scanner.scan(/ ([^ :][^ ]*)/)
-            params << scanner[1]
-          end
-          params << scanner[1] if scanner.scan(/ :(.+)/)
-
-          command = MESSAGE_NUMBERS[command.to_i] || 'UNKNOWN' if command.to_i > 0
-
-          message_type = "#{command.downcase.split('_').collect { |w| w.capitalize }.join}"
-          
-          if Net::IRC.const_defined?(message_type)
-            message_type = Net::IRC.const_get(message_type)
-            msg = message_type.new(*params)
-            msg.prefix = prefix
-            msg
-          else
-            Message.new(prefix, command, *params)
-          end
-        end
-      end
     end
 
     class Reply < Message
@@ -180,17 +153,45 @@ module Net
       end
     end
 
-    # 375 <target> :- <server> Message of the day -
-    class RplMotdstart < Reply
-      def initialize(target, text)
-        super(nil, 'RPL_MOTDSTART', target, text)
+    # 005 <target> ( [ "-" ] <parameter> ) | ( <parameter> "=" [ <value> ] ) *( ( [ "-" ] <parameter> ) | ( <parameter> "=" [ <value> ] ) ) :are supported by this server
+    class RplIsupport < Reply
+      class Parameter
+        PARAMETER_REGEX = /^(-)?([[:alnum:]]{1,20})(?:=(.*))?/
+        
+        def initialize(param)
+          @param = param
+          @matches = param.match(PARAMETER_REGEX)
+        end
+        
+        def name
+          @matches[2]
+        end
+        
+        def value
+          @matches[3] || @matches[1].nil?
+        end
+      end
+      
+      def initialize(target, *args)
+        raise ArgumentError, "wrong number of arguments (#{1 + args.size} for 3)" if args.size < 2
+        
+        @parameters = args[0..-2].collect { |p| Parameter.new(p) }
+        
+        super(nil, 'RPL_ISUPPORT', target, *args)
       end
     end
-
+    
     # 372 <target> :- <text>
     class RplMotd < Reply
       def initialize(target, text)
         super(nil, 'RPL_MOTD', target, text)
+      end
+    end
+
+    # 375 <target> :- <server> Message of the day -
+    class RplMotdstart < Reply
+      def initialize(target, text)
+        super(nil, 'RPL_MOTDSTART', target, text)
       end
     end
 
@@ -245,13 +246,18 @@ module Net
 
     # NOTICE <target> <text>
     class Notice < Message
-      attr_accessor :target, :text
+      attr_accessor :target, :text, :ctcp
       
       def initialize(target, text)
         @target = target
-        @text = text
+        @text = text.gsub(CTCP_REGEX, '')
+        @ctcp = text.scan(CTCP_REGEX)
         
-        super(nil, 'NOTICE', @target, @text)
+        super(nil, 'NOTICE', @target, text)
+      end
+      
+      def ctcp?
+        @ctcp.any?
       end
     end
     
@@ -313,15 +319,22 @@ module Net
     
     # PRIVMSG <target> <text>
     class Privmsg < Message
-      attr_accessor :target, :text
+      attr_accessor :target, :text, :ctcp
       
       def initialize(target, text)
         @target = target
-        @text = text
+        @text = text.gsub(CTCP_REGEX, '')
+        @ctcp = text.scan(CTCP_REGEX)
         
-        super(nil, 'PRIVMSG', @target, @text)
+        super(nil, 'PRIVMSG', @target, text)
+      end
+      
+      def ctcp?
+        @ctcp.any?
       end
     end
+    
+    # PRIVMSG <target>
     
     # QUIT [ <text> ]
     class Quit < Message
@@ -371,6 +384,7 @@ module Net
       @port = port || PORT_DEFAULT
       @started = false
       @socket = nil
+      @commands = COMMAND_MAPS.inject({}) { |merged,map| merged.merge!(YAML.load_file("#{File.dirname(__FILE__)}/#{map}.yml")) }
     end
 
     def started?
@@ -398,11 +412,41 @@ module Net
     end
 
     def each
-      while event = Message.read(@socket)
-        yield event
+      while line = @socket.readline.chomp
+        IRC.logger.debug "<<<<< #{line.inspect}"
+
+        scanner = StringScanner.new(line)
+        prefix = scanner.scan(/:([^ ]+) /) && scanner[1]
+        command = scanner.scan(/[[:alpha:]]+|\d{3}/)
+        params = []
+        14.times do
+          break if ! scanner.scan(/ ([^ :][^ ]*)/)
+          params << scanner[1]
+        end
+        params << scanner[1] if scanner.scan(/ :(.+)/)
+
+        message = nil
+        command_name = command.to_i > 0 ? command_for_number(command.to_i) : command
+        
+        if command_name
+          message_type = "#{command_name.downcase.split('_').collect { |w| w.capitalize }.join}"
+          if Net::IRC.const_defined?(message_type)
+            message_type = Net::IRC.const_get(message_type)
+            message = message_type.new(*params)
+            message.prefix = prefix
+          end
+        end
+        
+        message ||= Message.new(prefix, command_name || command, *params)
+
+        yield message
       end
     end
 
+    def command_for_number(number)
+      @commands[number]
+    end
+    
     def join(channels = nil)
       case channels
       when NilClass
