@@ -44,92 +44,113 @@ include Ansi
 Net::IRC.logger.level = Logger::DEBUG
 Net::IRC.logger.datetime_format = "%Y/%m/%d %H:%M:%S"
 
+Thread.abort_on_exception = true
+
 Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
-  irc.each do |message|
-    case message
-    # TODO: required = VERSION, PING, CLIENTINFO, ACTION
-    # TODO: handle internally... probably true for most CTCP requests
-    when Net::IRC::CTCPVersion
-      irc.ctcp_version(message.source, "net-irc simple-client", Net::IRC::VERSION, PLATFORM, "http://www.github.com/sbfaulkner/net-irc")
+  Thread.new do
+    irc.each do |message|
+      case message
+      # TODO: required = VERSION, PING, CLIENTINFO, ACTION
+      # TODO: handle internally... probably true for most CTCP requests
+      when Net::IRC::CTCPVersion
+        irc.ctcp_version(message.source, "net-irc simple-client", Net::IRC::VERSION, PLATFORM, "http://www.github.com/sbfaulkner/net-irc")
     
-    when Net::IRC::CTCP
-      puts highlight("Unhandled CTCP REQUEST: #{message.class} (#{message.code})", BOLD, fg(RED))
+      when Net::IRC::CTCP
+        puts highlight("Unhandled CTCP REQUEST: #{message.class} (#{message.code})", BOLD, fg(RED))
 
-    when Net::IRC::Join
-      puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} joined #{highlight(message.channels.first, BOLD, fg(GREEN))}."
+      when Net::IRC::Join
+        puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} joined #{highlight(message.channels.first, BOLD, fg(GREEN))}."
       
-    when Net::IRC::Part
-      if message.text && ! message.text.empty?
-        puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has left #{highlight(message.channels.first, BOLD, fg(GREEN))} (#{message.text})."
+      when Net::IRC::Part
+        if message.text && ! message.text.empty?
+          puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has left #{highlight(message.channels.first, BOLD, fg(GREEN))} (#{message.text})."
+        else
+          puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has left #{highlight(message.channels.first, BOLD, fg(GREEN))}."
+        end
+      
+      when Net::IRC::Quit
+        if message.text && ! message.text.empty?
+          puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has quit (#{message.text})."
+        else
+          puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has quit."
+        end
+      
+      when Net::IRC::Notice
+        puts highlight(message.text, fg(CYAN))
+      
+      when Net::IRC::Privmsg
+        puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} #{highlight(message.target, BOLD, fg(GREEN))}: #{highlight(message.text, BOLD)}"
+      
+      when Net::IRC::ErrNicknameinuse
+        irc.nick message.nickname.sub(/\d*$/) { |n| n.to_i + 1 }
+      
+      when Net::IRC::Error
+        puts highlight("Unhandled ERROR: #{message.class} (#{message.command})", BOLD, fg(RED))
+      
+      when Net::IRC::RplWelcome, Net::IRC::RplYourhost, Net::IRC::RplCreated
+        puts message.text
+    
+      when Net::IRC::RplLuserclient, Net::IRC::RplLuserme, Net::IRC::RplLocalusers, Net::IRC::RplGlobalusers, Net::IRC::RplStatsconn
+        puts highlight(message.text, fg(BLUE))
+
+      when Net::IRC::RplLuserop, Net::IRC::RplLuserchannels
+        puts highlight("#{message.count} #{message.text}", fg(BLUE))
+      
+      when Net::IRC::RplIsupport
+        # TODO: handle internally... parse into capabilities collection
+      
+      when Net::IRC::RplMyinfo
+      when Net::IRC::RplMotdstart
+
+      when Net::IRC::RplTopic
+        # TODO: handle internally
+        puts "#{highlight(message.channel, BOLD, fg(GREEN))}: #{message.text}"
+
+      when Net::IRC::RplTopicwhotime
+        # TODO: handle internally
+        puts "#{highlight(message.channel, BOLD, fg(GREEN))}: #{message.nickname} #{message.time.strftime("%Y/%m/%d %H:%M:%S")}"
+
+      when Net::IRC::RplNamreply
+        # TODO: handle internally
+        puts "#{highlight(message.channel, BOLD, fg(GREEN))}: #{message.names.join(', ')}"
+      
+      when Net::IRC::RplEndofnames
+        # TODO: handle internally
+
+      when Net::IRC::RplMotd
+        puts message.text.sub(/^- /,'')
+      
+      when Net::IRC::RplEndofmotd
+        puts ""
+    
+      when Net::IRC::Reply
+        puts highlight("Unhandled REPLY: #{message.class} (#{message.command})", BOLD, fg(RED))
+      
+      when Net::IRC::Message
+        puts highlight("Unhandled MESSAGE: #{message.class} (#{message.command})", BOLD, fg(RED))
+      
       else
-        puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has left #{highlight(message.channels.first, BOLD, fg(GREEN))}."
-      end
+        raise IOError, "unknown class #{message.class}"
       
-    when Net::IRC::Quit
-      if message.text && ! message.text.empty?
-        puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has quit (#{message.text})."
+      end
+    end
+  end
+
+  while line = STDIN.gets
+    scanner = StringScanner.new(line.chomp)
+    if command = scanner.scan(/\/([[:alpha:]]+)\s*/) && scanner[1]
+      case command.upcase
+      when 'JOIN'
+        # TODO: validate arguments... support for password... etc.
+        irc.join scanner.rest
+        
+      when 'QUIT'
+        break
       else
-        puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has quit."
+        puts highlight("Unknown COMMAND: #{command}", BOLD, fg(RED))
       end
-      
-    when Net::IRC::Notice
-      puts highlight(message.text, fg(CYAN))
-      
-    when Net::IRC::Privmsg
-      puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} #{highlight(message.target, BOLD, fg(GREEN))}: #{highlight(message.text, BOLD)}"
-      
-    when Net::IRC::ErrNicknameinuse
-      irc.nick message.nickname.sub(/\d*$/) { |n| n.to_i + 1 }
-      
-    when Net::IRC::Error
-      puts highlight("Unhandled ERROR: #{message.class} (#{message.command})", BOLD, fg(RED))
-      
-    when Net::IRC::RplWelcome, Net::IRC::RplYourhost, Net::IRC::RplCreated
-      puts message.text
-    
-    when Net::IRC::RplLuserclient, Net::IRC::RplLuserme, Net::IRC::RplLocalusers, Net::IRC::RplGlobalusers, Net::IRC::RplStatsconn
-      puts highlight(message.text, fg(BLUE))
-
-    when Net::IRC::RplLuserop, Net::IRC::RplLuserchannels
-      puts highlight("#{message.count} #{message.text}", fg(BLUE))
-      
-    when Net::IRC::RplIsupport
-      # TODO: handle internally... parse into capabilities collection
-      
-    when Net::IRC::RplMyinfo
-    when Net::IRC::RplMotdstart
-
-    when Net::IRC::RplTopic
-      # TODO: handle internally
-      puts "#{highlight(message.channel, BOLD, fg(GREEN))}: #{message.text}"
-
-    when Net::IRC::RplTopicwhotime
-      # TODO: handle internally
-      puts "#{highlight(message.channel, BOLD, fg(GREEN))}: #{message.nickname} #{message.time.strftime("%Y/%m/%d %H:%M:%S")}"
-
-    when Net::IRC::RplNamreply
-      # TODO: handle internally
-      puts "#{highlight(message.channel, BOLD, fg(GREEN))}: #{message.names.join(', ')}"
-      
-    when Net::IRC::RplEndofnames
-      # TODO: handle internally
-
-    when Net::IRC::RplMotd
-      puts message.text.sub(/^- /,'')
-      
-    when Net::IRC::RplEndofmotd
-      puts ""
-      irc.join '#rubyonrails'
-    
-    when Net::IRC::Reply
-      puts highlight("Unhandled REPLY: #{message.class} (#{message.command})", BOLD, fg(RED))
-      
-    when Net::IRC::Message
-      puts highlight("Unhandled MESSAGE: #{message.class} (#{message.command})", BOLD, fg(RED))
-      
     else
-      raise IOError, "unknown class #{message.class}"
-      
+      # TODO: send privmsg to channel
     end
   end
 end
