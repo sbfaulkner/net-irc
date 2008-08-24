@@ -204,21 +204,25 @@ module Net
     end
 
     class Reply < Message
-      attr_accessor :target, :text
+      attr_accessor :text
+      
+      def initialize(prefix, command, *args)
+        args.pop unless @text = args.last
+        super(nil, command, *args)
+      end
+    end
+    
+    class ReplyWithTarget < Reply
+      attr_accessor :target
       
       def initialize(prefix, command, target, *args)
         @target = target
-        if @text = args.last
-          super(nil, command, @target, *args)
-        else
-          args.pop
-          super(nil, command, @target, *args)
-        end
+        super(prefix, command, @target, *args)
       end
     end
 
     # 001 <target> :Welcome to the Internet Relay Network <nick>!<user>@<host>
-    class RplWelcome < Reply
+    class RplWelcome < ReplyWithTarget
       def initialize(target, text)
         super(nil, 'RPL_WELCOME', target, text)
       end
@@ -232,14 +236,14 @@ module Net
     end
 
     # 003 <target> :This server was created <date>
-    class RplCreated < Reply
+    class RplCreated < ReplyWithTarget
       def initialize(target, text)
         super(nil, 'RPL_CREATED', target, text)
       end
     end
 
     # 004 <target> <servername> <version> <available user modes> <available channel modes>
-    class RplMyinfo < Reply
+    class RplMyinfo < ReplyWithTarget
       attr_accessor :servername, :version, :available_user_modes, :available_channel_modes
       
       def initialize(target, servername, version, available_user_modes, available_channel_modes)
@@ -253,7 +257,7 @@ module Net
     end
 
     # 005 <target> ( [ "-" ] <parameter> ) | ( <parameter> "=" [ <value> ] ) *( ( [ "-" ] <parameter> ) | ( <parameter> "=" [ <value> ] ) ) :are supported by this server
-    class RplIsupport < Reply
+    class RplIsupport < ReplyWithTarget
       class Parameter
         PARAMETER_REGEX = /^(-)?([[:alnum:]]{1,20})(?:=(.*))?/
         
@@ -280,21 +284,21 @@ module Net
       end
     end
     
-    # 250 :<text>
-    class RplStatsconn < Reply
+    # 250 <target> :<text>
+    class RplStatsconn < ReplyWithTarget
       def initialize(target, text)
         super(nil, 'RPL_LSTATSCONN', target, text)
       end
     end
     
-    # 251 :<text>
-    class RplLuserclient < Reply
+    # 251 <target> :<text>
+    class RplLuserclient < ReplyWithTarget
       def initialize(target, text)
         super(nil, 'RPL_LUSERCLIENT', target, text)
       end
     end
     
-    class ReplyWithCount < Reply
+    class ReplyWithCount < ReplyWithTarget
       attr_accessor :count
       
       def initialize(prefix, command, target, count, text)
@@ -303,38 +307,84 @@ module Net
       end
     end
     
-    # 252 <count> :<text>
+    # 252 <target> <count> :<text>
     class RplLuserop < ReplyWithCount
       def initialize(target, count, text)
         super(nil, 'RPL_LUSEROP', target, count, text)
       end
     end
     
-    # 254 <count> :<text>
-    class RplLuserchannels < Reply
+    # 254 <target> <count> :<text>
+    class RplLuserchannels < ReplyWithCount
       def initialize(target, count, text)
         super(nil, 'RPL_LUSERCHANNELS', target, count, text)
       end
     end
     
-    # 255 :<text>
-    class RplLuserme < Reply
+    # 255 <target> :<text>
+    class RplLuserme < ReplyWithTarget
       def initialize(target, text)
         super(nil, 'RPL_LUSERME', target, text)
       end
     end
     
-    # 265 :<text>
-    class RplLocalusers < Reply
+    # 265 <target> :<text>
+    class RplLocalusers < ReplyWithTarget
       def initialize(target, text)
         super(nil, 'RPL_LOCALUSERS', target, text)
       end
     end
     
-    # 266 :<text>
-    class RplGlobalusers < Reply
+    # 266 <target> :<text>
+    class RplGlobalusers < ReplyWithTarget
       def initialize(target, text)
         super(nil, 'RPL_GLOBALUSERS', target, text)
+      end
+    end
+    
+    class ReplyWithChannel < ReplyWithTarget
+      attr_accessor :channel
+      
+      def initialize(prefix, command, target, channel, *args)
+        @channel = channel
+        super(prefix, command, target, @channel, *args)
+      end
+    end
+
+    # 332 <target> <target> <channel> :<text>
+    class RplTopic < ReplyWithChannel
+      def initialize(target, channel, text)
+        super(nil, 'RPL_TOPIC', target, channel, text)
+      end
+    end
+    
+    # 333 <target> <channel> <nickname> <time>
+    class RplTopicwhotime < ReplyWithChannel
+      attr_accessor :nickname, :time
+      
+      def initialize(target, channel, nickname, time)
+        @nickname = nickname
+        @time = Time.at(time.to_i)
+        super(nil, 'RPL_TOPICWHOTIME', target, channel, nickname, time, nil)
+      end
+    end
+    
+    # 353 <target> ( "=" | "*" | "@" ) <channel> :[ "@" | "+" ] <nick> *( " " [ "@" / "+" ] <nick> )
+    class RplNamreply < Reply
+      attr_accessor :channel_type, :channel, :names
+      
+      def initialize(target, channel_type, channel, names)
+        @channel_type = channel_type
+        @channel = channel
+        @names = names.split(' ')
+        super(nil, 'RPL_NAMREPLY', target, @channel_type, @channel, names, nil)
+      end
+    end
+    
+    # 366 <target> <channel> :End of /NAMES list
+    class RplEndofnames < ReplyWithChannel
+      def initialize(target, channel, text)
+        super(nil, 'RPL_ENDOFNAMES', target, channel, text)
       end
     end
     
@@ -481,8 +531,6 @@ module Net
       end
     end
     
-    # PRIVMSG <target>
-    
     # QUIT [ <text> ]
     class Quit < Message
       attr_accessor :text
@@ -627,6 +675,10 @@ module Net
       Privmsg.new(target, text).write(@socket)
     end
     
+    def quit(text = nil)
+      Quit.new(text).write(@socket)
+    end
+    
     def user(user, realname, mode = nil)
       User.new(user, mode || USER_MODE_DEFAULT, realname).write(@socket)
     end
@@ -643,6 +695,7 @@ module Net
     end
 
     def do_finish
+      quit if started?
     ensure
       @started = false
       @socket.close if @socket && ! @socket.closed?
