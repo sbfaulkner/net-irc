@@ -610,7 +610,7 @@ module Net
         IRC.logger.debug "<<<<< #{line.inspect}"
 
         message = Message.parse(line.chomp)
-        
+      
         if message.respond_to? :ctcp
           message.ctcp.each do |ctcp|
             ctcp.source = message.prefix.nickname
@@ -626,6 +626,8 @@ module Net
           yield message
         end
       end
+    rescue IOError
+      raise if started?
     end
 
     def ctcp(target, text)
