@@ -47,6 +47,14 @@ Net::IRC.logger.datetime_format = "%Y/%m/%d %H:%M:%S"
 Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
   irc.each do |message|
     case message
+    # TODO: required = VERSION, PING, CLIENTINFO, ACTION
+    # TODO: build reply into IRC class?
+    when Net::IRC::CTCPVersion
+      irc.ctcp_version(message.source, "net-irc simple-client", Net::IRC::VERSION, PLATFORM, "http://www.github.com/sbfaulkner/net-irc")
+    
+    when Net::IRC::CTCP
+      puts highlight("Unhandled CTCP REQUEST: #{message.class} (#{message.code})", BOLD, fg(RED))
+
     when Net::IRC::Join
       puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} joined #{highlight(message.channels.first, BOLD, fg(GREEN))}."
       
@@ -65,27 +73,9 @@ Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
       end
       
     when Net::IRC::Notice
-      if message.ctcp?
-        message.ctcp.each do |req|
-          case req
-          when ''
-          else
-            puts highlight("Unhandled CTCP REQUEST: #{req}", BOLD, fg(RED))
-          end
-        end
-      end
       puts highlight(message.text, fg(BLUE)) unless message.text.empty?
       
     when Net::IRC::Privmsg
-      if message.ctcp?
-        message.ctcp.each do |req|
-          case req
-          when ''
-          else
-            puts highlight("Unhandled CTCP REQUEST: #{req}", BOLD, fg(RED))
-          end
-        end
-      end
       puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} #{highlight(message.target, BOLD, fg(GREEN))}: #{highlight(message.text, BOLD)}" unless message.text.empty?
       
     when Net::IRC::ErrNicknameinuse
@@ -111,9 +101,6 @@ Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
       
     when Net::IRC::Reply
       puts highlight("Unhandled REPLY: #{message.class} (#{message.command})", BOLD, fg(RED))
-      
-    when Net::IRC::Ping
-      irc.pong message.server
       
     when Net::IRC::Message
       puts highlight("Unhandled MESSAGE: #{message.class} (#{message.command})", BOLD, fg(RED))

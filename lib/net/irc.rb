@@ -23,13 +23,78 @@ module Net
 
     PORT_DEFAULT = 6667
     
-    COMMAND_MAPS = %w(rfc1459 rfc2812 isupport hybrid ircu)
-
+    VERSION = "0.0.2"
+    
+    class CTCP
+      attr_accessor :source, :code, :parameters
+      
+      CTCP_REGEX = /\001(.*?)\001/
+      
+      def initialize(code, *parameters)
+        @source = nil
+        @code = code
+        @parameters = parameters
+      end
+      
+      def to_s
+        str = "\001#{code}"
+        str << parameters.collect { |p| " #{p}"}.join
+        str << "\001"
+      end
+      
+      class << self
+        def parse(text)
+          [
+            text.gsub(CTCP_REGEX, ''),
+            text.scan(CTCP_REGEX).flatten.collect do |message|
+              parameters = message.split(' ')
+              case code = parameters.shift
+              when 'VERSION'
+                CTCPVersion.new(*parameters)
+              when 'PING'
+                CTCPPing.new(*parameters)
+              when 'CLIENTINFO'
+                CTCPClientinfo(*parameters)
+              when 'ACTION'
+                CTCPAction(*parameters)
+              else
+                CTCP.new(code, *parameters)
+              end
+            end
+          ]
+        end
+      end
+    end
+    
+    class CTCPVersion < CTCP
+      def initialize(*parameters)
+        super('VERSION', *parameters)
+      end
+    end
+    
+    class CTCPPing < CTCP
+      def initialize(*parameters)
+        super('PING', *parameters)
+      end
+    end
+    
+    class CTCPClientinfo < CTCP
+      def initialize(*parameters)
+        super('CLIENTINFO', *parameters)
+      end
+    end
+    
+    class CTCPAction < CTCP
+      def initialize(*parameters)
+        super('ACTION', *parameters)
+      end
+    end
+    
     class Message
       attr_reader :prefix
       attr_accessor :command, :parameters
 
-      CTCP_REGEX = /\001(.*?)\001/
+      COMMAND_MAPS = %w(rfc1459 rfc2812 isupport hybrid ircu)
 
       def initialize(*args)
         raise ArgumentError, "wrong number of arguments (#{args.size} for 2)" if args.size < 2
@@ -101,6 +166,40 @@ module Net
         line = to_s
         IRC.logger.debug ">>>>> #{line.inspect}"
         socket.writeline(line)
+      end
+      
+      class << self
+        def parse(line)
+          scanner = StringScanner.new(line)
+          
+          prefix = scanner.scan(/:([^ ]+) /) && scanner[1]
+          command = scanner.scan(/[[:alpha:]]+|\d{3}/)
+          params = []
+          14.times do
+            break if ! scanner.scan(/ ([^ :][^ ]*)/)
+            params << scanner[1]
+          end
+          params << scanner[1] if scanner.scan(/ :(.+)/)
+
+          message = nil
+          command_name = command.to_i > 0 ? command_for_number(command.to_i) : command
+        
+          if command_name
+            message_type = "#{command_name.downcase.split('_').collect { |w| w.capitalize }.join}"
+            if Net::IRC.const_defined?(message_type)
+              message_type = Net::IRC.const_get(message_type)
+              message = message_type.new(*params)
+              message.prefix = prefix
+            end
+          end
+        
+          message ||= Message.new(prefix, command_name || command, *params)
+        end
+        
+        def command_for_number(number)
+          @command_map ||= COMMAND_MAPS.inject({}) { |merged,map| merged.merge!(YAML.load_file("#{File.dirname(__FILE__)}/#{map}.yml")) }
+          @command_map[number]
+        end
       end
     end
 
@@ -308,14 +407,9 @@ module Net
       
       def initialize(target, text)
         @target = target
-        @text = text.gsub(CTCP_REGEX, '')
-        @ctcp = text.scan(CTCP_REGEX)
+        @text, @ctcp = CTCP.parse(text)
         
         super(nil, 'NOTICE', @target, text)
-      end
-      
-      def ctcp?
-        @ctcp.any?
       end
     end
     
@@ -381,14 +475,9 @@ module Net
       
       def initialize(target, text)
         @target = target
-        @text = text.gsub(CTCP_REGEX, '')
-        @ctcp = text.scan(CTCP_REGEX)
+        @text, @ctcp = CTCP.parse(text)
         
         super(nil, 'PRIVMSG', @target, text)
-      end
-      
-      def ctcp?
-        @ctcp.any?
       end
     end
     
@@ -442,7 +531,6 @@ module Net
       @port = port || PORT_DEFAULT
       @started = false
       @socket = nil
-      @commands = COMMAND_MAPS.inject({}) { |merged,map| merged.merge!(YAML.load_file("#{File.dirname(__FILE__)}/#{map}.yml")) }
     end
 
     def started?
@@ -470,39 +558,36 @@ module Net
     end
 
     def each
-      while line = @socket.readline.chomp
+      while line = @socket.readline
         IRC.logger.debug "<<<<< #{line.inspect}"
 
-        scanner = StringScanner.new(line)
-        prefix = scanner.scan(/:([^ ]+) /) && scanner[1]
-        command = scanner.scan(/[[:alpha:]]+|\d{3}/)
-        params = []
-        14.times do
-          break if ! scanner.scan(/ ([^ :][^ ]*)/)
-          params << scanner[1]
-        end
-        params << scanner[1] if scanner.scan(/ :(.+)/)
-
-        message = nil
-        command_name = command.to_i > 0 ? command_for_number(command.to_i) : command
+        message = Message.parse(line.chomp)
         
-        if command_name
-          message_type = "#{command_name.downcase.split('_').collect { |w| w.capitalize }.join}"
-          if Net::IRC.const_defined?(message_type)
-            message_type = Net::IRC.const_get(message_type)
-            message = message_type.new(*params)
-            message.prefix = prefix
+        if message.respond_to? :ctcp
+          message.ctcp.each do |ctcp|
+            ctcp.source = message.prefix.nickname
+            yield ctcp
           end
+          next if message.text.empty?
         end
-        
-        message ||= Message.new(prefix, command_name || command, *params)
 
-        yield message
+        case message
+        when Net::IRC::Ping
+          pong message.server
+        else
+          yield message
+        end
       end
     end
 
-    def command_for_number(number)
-      @commands[number]
+    def ctcp(target, text)
+      privmsg(target, "\001#{text}\001")
+    end
+    
+    def ctcp_version(target, client, version, environment, url = nil)
+      text = "#{client} #{version} - #{environment}"
+      text << " - #{url}" if url
+      notice(target, CTCPVersion.new(text).to_s)
     end
     
     def join(channels = nil)
@@ -520,6 +605,10 @@ module Net
     
     def nick(nickname)
       Nick.new(nickname).write(@socket)
+    end
+    
+    def notice(target, text)
+      Notice.new(target, text).write(@socket)
     end
     
     def part(channels, message = nil)
