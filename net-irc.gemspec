@@ -16,5 +16,5 @@ SPEC = Gem::Specification.new do |s|
   s.has_rdoc = true 
   s.extra_rdoc_files = ["README.markdown"] 
   # s.add_dependency("fastercsv", ">= 1.2.3") 
-  # s.executables = ["rsql"]
+  s.executables = ["nicl"]
 end 
