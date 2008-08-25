@@ -4,6 +4,7 @@
 # Created by: S. Brent Faulkner (brentf@unwwwired.net) 2007-08-29
 #
 
+require 'rubygems'
 require 'net/irc'
 
 module Ansi
@@ -43,12 +44,22 @@ end
 
 include Ansi
 
+def prompt(text)
+  print text
+  readline.chomp
+end
+  
 Net::IRC.logger.level = Logger::DEBUG
 Net::IRC.logger.datetime_format = "%Y/%m/%d %H:%M:%S"
 
 Thread.abort_on_exception = true
 
-Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
+server = ARGV[0] || "irc.freenode.net"
+port = ARGV[1] || 6667
+user = ARGV[2] || prompt('User: ')
+full_name = ARGV[3] || ARGV[2] || prompt('Full name: ')
+
+Net::IRC.start user, full_name, server, port do |irc|
   Thread.new do
     irc.each do |message|
       case message
@@ -157,7 +168,7 @@ Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
     end
   end
 
-  while line = STDIN.gets
+  while line = readline
     scanner = StringScanner.new(line.chomp)
     if command = scanner.scan(/\/([[:alpha:]]+)\s*/) && scanner[1]
       case command.upcase
