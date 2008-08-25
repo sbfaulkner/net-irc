@@ -55,8 +55,17 @@ Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
       when Net::IRC::CTCPVersion
         irc.ctcp_version(message.source, "net-irc simple-client", Net::IRC::VERSION, PLATFORM, "http://www.github.com/sbfaulkner/net-irc")
     
+      when Net::IRC::CTCPAction
+        puts "#{highlight(message.source, BOLD, fg(YELLOW))} #{highlight(message.target, BOLD, fg(GREEN))}: #{highlight(message.text, BOLD)}"
+
+      when Net::IRC::CTCPPing
+        irc.ctcp_ping(message.source, message.arg)
+
+      when Net::IRC::CTCPTime
+        irc.ctcp_time(message.source)
+        
       when Net::IRC::CTCP
-        puts highlight("Unhandled CTCP REQUEST: #{message.class} (#{message.code})", BOLD, fg(RED))
+        puts highlight("Unhandled CTCP REQUEST: #{message.class} (#{message.keyword})", BOLD, fg(RED))
 
       when Net::IRC::Join
         puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} joined #{highlight(message.channels.first, BOLD, fg(GREEN))}."
@@ -68,6 +77,10 @@ Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
           puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has left #{highlight(message.channels.first, BOLD, fg(GREEN))}."
         end
       
+      when Net::IRC::Mode
+        # TODO: handle internally
+        puts highlight("#{message.channel} mode changed #{message.modes}", fg(BLUE))
+        
       when Net::IRC::Quit
         if message.text && ! message.text.empty?
           puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} has quit (#{message.text})."
@@ -81,6 +94,9 @@ Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
       when Net::IRC::Privmsg
         puts "#{highlight(message.prefix.nickname, BOLD, fg(YELLOW))} #{highlight(message.target, BOLD, fg(GREEN))}: #{highlight(message.text, BOLD)}"
       
+      when Net::IRC::Nick
+        puts "#{highlight(message.prefix.nickname, BOLD)} is now #{highlight(message.nickname, BOLD, fg(YELLOW))}"
+        
       when Net::IRC::ErrNicknameinuse
         irc.nick message.nickname.sub(/\d*$/) { |n| n.to_i + 1 }
       
@@ -143,6 +159,10 @@ Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
       when 'JOIN'
         # TODO: validate arguments... support for password... etc.
         irc.join scanner.rest
+        
+      when 'PART'
+        # TODO: validate arguments... support for password... etc.
+        irc.part scanner.rest
         
       when 'QUIT'
         break
