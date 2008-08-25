@@ -99,7 +99,10 @@ Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
         
       when Net::IRC::ErrNicknameinuse
         irc.nick message.nickname.sub(/\d*$/) { |n| n.to_i + 1 }
-      
+
+      when Net::IRC::ErrNeedreggednick
+        irc.privmsg('nickserv', 'help')
+        
       when Net::IRC::Error
         puts highlight("Unhandled ERROR: #{message.class} (#{message.command})", BOLD, fg(RED))
       
@@ -159,7 +162,11 @@ Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
       when 'JOIN'
         # TODO: validate arguments... support for password... etc.
         irc.join scanner.rest
-        
+      
+      when 'MSG'
+        # TODO: validate arguments... support for password... etc.
+        scanner.scan(/(.+)\s+(.*)/)
+        irc.privmsg(scanner[1], scanner[2])
       when 'PART'
         # TODO: validate arguments... support for password... etc.
         irc.part scanner.rest
@@ -169,8 +176,10 @@ Net::IRC.start 'unwwwired', 'S. Brent Faulkner', 'irc.freenode.net' do |irc|
       else
         puts highlight("Unknown COMMAND: #{command}", BOLD, fg(RED))
       end
+    elsif scanner.scan(/(.+)\s+(.*)/)
+      irc.privmsg(scanner[1], scanner[2])
     else
-      # TODO: send privmsg to channel
+      # TODO: error? need a concept of a current room
     end
   end
 end
