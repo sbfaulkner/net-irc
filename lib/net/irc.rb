@@ -23,7 +23,7 @@ module Net
 
     PORT_DEFAULT = 6667
     
-    VERSION = "0.0.2"
+    VERSION = "0.9.1"
     
     class CTCP
       attr_accessor :source, :target, :keyword, :parameters
