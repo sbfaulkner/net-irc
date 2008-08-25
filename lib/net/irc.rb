@@ -26,18 +26,18 @@ module Net
     VERSION = "0.0.2"
     
     class CTCP
-      attr_accessor :source, :code, :parameters
+      attr_accessor :source, :target, :keyword, :parameters
       
       CTCP_REGEX = /\001(.*?)\001/
       
-      def initialize(code, *parameters)
+      def initialize(keyword, *parameters)
         @source = nil
-        @code = code
+        @keyword = keyword
         @parameters = parameters
       end
       
       def to_s
-        str = "\001#{code}"
+        str = "\001#{keyword}"
         str << parameters.collect { |p| " #{p}"}.join
         str << "\001"
       end
@@ -48,17 +48,27 @@ module Net
             text.gsub(CTCP_REGEX, ''),
             text.scan(CTCP_REGEX).flatten.collect do |message|
               parameters = message.split(' ')
-              case code = parameters.shift
+              case keyword = parameters.shift
               when 'VERSION'
                 CTCPVersion.new(*parameters)
               when 'PING'
                 CTCPPing.new(*parameters)
               when 'CLIENTINFO'
-                CTCPClientinfo(*parameters)
+                CTCPClientinfo.new(*parameters)
               when 'ACTION'
-                CTCPAction(*parameters)
+                CTCPAction.new(*parameters)
+              when 'FINGER'
+                CTCPFinger.new(*parameters)
+              when 'TIME'
+                CTCPTime.new(*parameters)
+              when 'DCC'
+                CTCPDcc.new(*parameters)
+              when 'ERRMSG'
+                CTCPErrmsg.new(*parameters)
+              when 'PLAY'
+                CTCPPlay.new(*parameters)
               else
-                CTCP.new(code, *parameters)
+                CTCP.new(keyword, *parameters)
               end
             end
           ]
@@ -68,25 +78,68 @@ module Net
     
     class CTCPVersion < CTCP
       def initialize(*parameters)
-        super('VERSION', *parameters)
+        super('VERSION', parameters)
       end
     end
     
     class CTCPPing < CTCP
-      def initialize(*parameters)
-        super('PING', *parameters)
+      attr_accessor :arg
+      
+      def initialize(arg = nil)
+        if @arg = arg
+          super('PING', arg)
+        else
+          super('PING')
+        end
       end
     end
     
     class CTCPClientinfo < CTCP
-      def initialize(*parameters)
-        super('CLIENTINFO', *parameters)
+      def initialize(*keywords)
+        super('CLIENTINFO', *keywords)
       end
     end
     
     class CTCPAction < CTCP
+      attr_accessor :text
+      
       def initialize(*parameters)
+        @text = parameters.join(' ')
+        
         super('ACTION', *parameters)
+      end
+    end
+
+    class CTCPFinger < CTCP
+      def initialize(text = nil)
+        super('FINGER', text)
+      end
+    end
+
+    class CTCPTime < CTCP
+      attr_accessor :time
+      def initialize(*parameters)
+        @time = parameters.join(' ')
+        
+        super('TIME', *parameters)
+      end
+    end
+
+    class CTCPDcc < CTCP
+      def initialize(type, protocol, ip, port, *args)
+        super('DCC', type, protocol, ip, port, *args)
+      end
+    end
+
+    class CTCPErrmsg < CTCP
+      def initialize(keyword, text = nil)
+        super('ERRMSG', keyword, text)
+      end
+    end
+
+    class CTCPPlay < CTCP
+      def initialize(filename, mime_type)
+        super('PLAY', filename, mime_type)
       end
     end
     
@@ -409,7 +462,7 @@ module Net
       end
     end
     
-    class Error < Reply
+    class Error < ReplyWithTarget
     end
 
     # 422 <target> <nickname> :Nickname is already in use.
@@ -420,6 +473,17 @@ module Net
         @nickname = nickname
         
         super(nil, 'ERR_NICKNAMEINUSE', target, @nickname, text)
+      end
+    end
+    
+    # 477 <target> <channel> :<text>
+    class ErrNeedreggednick < Error
+      attr_accessor :channel
+      
+      def initialize(target, channel, text)
+        @channel = channel
+        
+        super(nil, 'ERR_NEEDREGGEDNICK', target, channel, text)
       end
     end
     
@@ -440,6 +504,18 @@ module Net
       end
     end
 
+    # MODE <channel> *( ( "-" / "+" ) *<modes> *<modeparams> )
+    class Mode < Message
+      attr_accessor :channel, :modes
+      
+      def initialize(channel, *parameters)
+        @channel = channel
+        @modes = parameters.join(' ')
+        
+        super(nil, 'MODE', channel, *parameters)
+      end
+    end
+    
     # NICK <nickname>
     class Nick < Message
       attr_accessor :nickname
@@ -471,9 +547,9 @@ module Net
         @channels = channels.split(',')
 
         if message
-          super(nil, 'JOIN', channels, message)
+          super(nil, 'PART', channels, message)
         else
-          super(nil, 'JOIN', channels)
+          super(nil, 'PART', channels)
         end
       end
     end
@@ -614,6 +690,8 @@ module Net
         if message.respond_to? :ctcp
           message.ctcp.each do |ctcp|
             ctcp.source = message.prefix.nickname
+            ctcp.target = message.target
+            
             yield ctcp
           end
           next if message.text.empty?
@@ -634,10 +712,18 @@ module Net
       privmsg(target, "\001#{text}\001")
     end
     
-    def ctcp_version(target, client, version, environment, url = nil)
-      text = "#{client} #{version} - #{environment}"
-      text << " - #{url}" if url
-      notice(target, CTCPVersion.new(text).to_s)
+    def ctcp_version(target, *parameters)
+      notice(target, CTCPVersion.new(*parameters).to_s)
+    end
+    
+    def ctcp_ping(target, arg = nil)
+      notice(target, CTCPPing.new(arg).to_s)
+    end
+    
+    def ctcp_time(target, time = nil)
+      time ||= Time.now
+      differential = '%.2d%.2d' % (time.utc_offset / 60).divmod(60)
+      notice(target, CTCPTime.new(time.strftime("%a, %d %b %Y %H:%M #{differential}")).to_s)
     end
     
     def join(channels = nil)
