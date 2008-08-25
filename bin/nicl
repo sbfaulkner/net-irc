@@ -1,6 +1,8 @@
 #!/usr/bin/ruby
-
-$:.push(File.join(File.dirname(__FILE__),'../lib'))
+#
+# nicl Copyright © 2007-2008 unwwwired.net
+# Created by: S. Brent Faulkner (brentf@unwwwired.net) 2007-08-29
+#
 
 require 'net/irc'
 
