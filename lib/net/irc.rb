@@ -673,8 +673,8 @@ module Net
     end
 
     class << self
-      def start(user, realname, address, port = nil, &block)
-        new(address, port).start(user, realname, &block)
+      def start(user, password, realname, address, port = nil, &block)
+        new(address, port).start(user, password, realname, &block)
       end
     end
 
@@ -689,18 +689,18 @@ module Net
       @started
     end
 
-    def start(user, realname, nickname = nil)
+    def start(user, password, realname, nickname = nil)
       raise IOError, 'IRC session already started' if started?
 
       if block_given?
         begin
-          do_start(user, realname, nickname)
+          do_start(user, password, realname, nickname)
           return yield(self)
         ensure
           do_finish
         end
       else
-        do_start(user, realname, nickname)
+        do_start(user, password, realname, nickname)
         return self
       end
     end
@@ -782,6 +782,10 @@ module Net
         Part.new(Array(channels).join(','))
       end.write(@socket)
     end
+
+    def pass(password)
+      Pass.new(password).write(@socket)
+    end
     
     def pong(server, target = nil)
       Pong.new(server, target).write(@socket)
@@ -800,9 +804,9 @@ module Net
     end
 
     private
-    def do_start(user, realname, nickname = nil)
+    def do_start(user, password, realname, nickname = nil)
       @socket = InternetMessageIO.old_open(@address, @port)
-      # TODO: Pass.new(password).write(@socket)
+      pass(password) unless password.nil? || password.empty?
       nick(user)
       user(user, realname)
       @started = true

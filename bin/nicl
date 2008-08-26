@@ -44,9 +44,38 @@ end
 
 include Ansi
 
-def prompt(text)
-  print text
-  STDIN.readline.chomp
+begin
+  require 'termios'
+  # real implementation for toggling echo
+  def echo(on = true)
+    oldt = Termios.tcgetattr(STDIN)
+    newt = oldt.dup
+    newt.lflag &= ~Termios::ECHO
+    Termios.tcsetattr(STDIN, Termios::TCSANOW, newt)
+  
+    # if no block is provided, return the original echo setting
+    return (oldt.lflag & Termios::ECHO) == Termios::ECHO unless block_given?
+  
+    # otherwise yield to the block and restore the original echo setting
+    ret = yield
+    Termios.tcsetattr(STDIN, Termios::TCSANOW, oldt)
+    ret
+  end
+rescue LoadError
+  # minimal stub in case Termios is not installed
+  def echo(on = true)
+    return true unless block_given?
+    yield
+  end
+end
+
+def prompt(text, hidden = false)
+  echo(false) do
+    print text
+    line = STDIN.readline.chomp
+    print "\n"
+    line
+  end
 end
 
 # TODO: a bit backwards... should probably be "Net::IRC.logger = logger"
@@ -61,8 +90,9 @@ server = ARGV[0] || "irc.freenode.net"
 port = ARGV[1] && ARGV[1].to_i || 6667
 user = ARGV[2] || prompt('User: ')
 full_name = ARGV[3] || ARGV[2] || prompt('Full name: ')
+password = ARGV[4] || prompt('Password: ', true)
 
-Net::IRC.start user, full_name, server, port do |irc|
+Net::IRC.start user, password, full_name, server, port do |irc|
   Thread.new do
     irc.each do |message|
       case message
