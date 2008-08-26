@@ -214,7 +214,7 @@ Net::IRC.start user, password, full_name, server, port do |irc|
       
       when 'MSG'
         # TODO: validate arguments... support for password... etc.
-        scanner.scan(/([\S]+)\s+(.*)/)
+        scanner.scan(/(\S+)\s+(.*)/)
         irc.privmsg(scanner[1], scanner[2])
       when 'PART'
         # TODO: validate arguments... support for password... etc.
@@ -225,7 +225,7 @@ Net::IRC.start user, password, full_name, server, port do |irc|
       else
         puts highlight("Unknown COMMAND: #{command}", BOLD, fg(RED))
       end
-    elsif scanner.scan(/(.+)\s+(.*)/)
+    elsif scanner.scan(/(\S+)\s+(.*)/)
       irc.privmsg(scanner[1], scanner[2])
     else
       # TODO: error? need a concept of a current room
