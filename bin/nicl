@@ -46,16 +46,19 @@ include Ansi
 
 def prompt(text)
   print text
-  readline.chomp
+  STDIN.readline.chomp
 end
-  
+
+# TODO: a bit backwards... should probably be "Net::IRC.logger = logger"
+logger = Net::IRC.logger
+
 Net::IRC.logger.level = Logger::DEBUG
 Net::IRC.logger.datetime_format = "%Y/%m/%d %H:%M:%S"
 
 Thread.abort_on_exception = true
 
 server = ARGV[0] || "irc.freenode.net"
-port = ARGV[1] || 6667
+port = ARGV[1] && ARGV[1].to_i || 6667
 user = ARGV[2] || prompt('User: ')
 full_name = ARGV[3] || ARGV[2] || prompt('Full name: ')
 
@@ -115,6 +118,9 @@ Net::IRC.start user, full_name, server, port do |irc|
 
       when Net::IRC::ErrNeedreggednick
         irc.privmsg('nickserv', 'help')
+      
+      when Net::IRC::RplLoggedin, Net::IRC::RplLoggedout
+        puts highlight(message.text, fg(CYAN))
         
       when Net::IRC::Error
         puts highlight("Unhandled ERROR: #{message.class} (#{message.command})", BOLD, fg(RED))
@@ -168,9 +174,9 @@ Net::IRC.start user, full_name, server, port do |irc|
     end
   end
 
-  while line = readline
+  while line = STDIN.readline
     scanner = StringScanner.new(line.chomp)
-    if command = scanner.scan(/\/([[:alpha:]]+)\s*/) && scanner[1]
+    if command = scanner.scan(/\/(\S+)\s*/) && scanner[1]
       case command.upcase
       when 'JOIN'
         # TODO: validate arguments... support for password... etc.
@@ -178,7 +184,7 @@ Net::IRC.start user, full_name, server, port do |irc|
       
       when 'MSG'
         # TODO: validate arguments... support for password... etc.
-        scanner.scan(/(.+)\s+(.*)/)
+        scanner.scan(/([\S]+)\s+(.*)/)
         irc.privmsg(scanner[1], scanner[2])
       when 'PART'
         # TODO: validate arguments... support for password... etc.

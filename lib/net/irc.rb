@@ -147,7 +147,7 @@ module Net
       attr_reader :prefix
       attr_accessor :command, :parameters
 
-      COMMAND_MAPS = %w(rfc1459 rfc2812 isupport hybrid ircu)
+      COMMAND_MAPS = %w(rfc1459 rfc2812 isupport hybrid ircu hyperion)
 
       def initialize(*args)
         raise ArgumentError, "wrong number of arguments (#{args.size} for 2)" if args.size < 2
@@ -486,6 +486,34 @@ module Net
         super(nil, 'ERR_NEEDREGGEDNICK', target, channel, text)
       end
     end
+
+    # 901 <target> <id> <username> <hostname> :You are now logged in. (id <id>, username <username>, hostname <hostname>)
+    class ReplyWithRegistryParameters < ReplyWithTarget
+      attr_accessor :id, :username, :hostname
+      
+      def initialize(prefix, command, target, id, username, hostname, text)
+        @id = id
+        @username = username
+        @hostname = hostname
+        
+        super(prefix, command, target, id, username, hostname, text)
+      end
+    end
+
+    # 901 <target> <id> <username> <hostname> :You are now logged in. (id <id>, username <username>, hostname <hostname>)
+    class RplLoggedin < ReplyWithRegistryParameters
+      def initialize(target, id, username, hostname, text)
+        super(nil, 'RPL_LOGGED_IN', target, id, username, hostname, text)
+      end
+    end
+    
+    # 902 <target> <id> <username> <hostname> :You are now logged out. (id <id>, username <username>, hostname <hostname>)
+    class RplLoggedout < ReplyWithRegistryParameters
+      def initialize(target, id, username, hostname, text)
+        super(nil, 'RPL_LOGGED_OUT', target, id, username, hostname, text)
+      end
+    end
+    
     
     # JOIN ( <channel> *( "," <channel> ) [ <key> *( "," <key> ) ] )
     #      / "0"
