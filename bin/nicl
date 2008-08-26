@@ -120,7 +120,7 @@ Net::IRC.start user, full_name, server, port do |irc|
         irc.privmsg('nickserv', 'help')
       
       when Net::IRC::RplLoggedin, Net::IRC::RplLoggedout
-        puts highlight(message.text, fg(CYAN))
+        puts highlight(message.text, fg(GREEN))
         
       when Net::IRC::Error
         puts highlight("Unhandled ERROR: #{message.class} (#{message.command})", BOLD, fg(RED))
