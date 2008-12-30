@@ -1,7 +1,7 @@
 SPEC = Gem::Specification.new do |s| 
   # identify the gem
   s.name = "net-irc" 
-  s.version = "0.9.3" 
+  s.version = "0.9.4" 
   s.author = "S. Brent Faulkner" 
   s.email = "brentf@unwwwired.net" 
   s.homepage = "http://www.unwwwired.net" 
