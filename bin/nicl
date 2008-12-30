@@ -70,7 +70,7 @@ rescue LoadError
 end
 
 def prompt(text, hidden = false)
-  echo(false) do
+  echo(hidden) do
     print text
     line = STDIN.readline.chomp
     print "\n"
