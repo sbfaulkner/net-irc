@@ -1,10 +1,6 @@
-require 'rubygems'
-Gem::manage_gems
-require 'rake/gempackagetask'
+require "bundler/gem_tasks"
+require "rspec/core/rake_task"
 
-load File.join(File.dirname(__FILE__),'net-irc.gemspec')
+RSpec::Core::RakeTask.new(:spec)
 
-Rake::GemPackageTask.new(SPEC) do |pkg|
-end
-
-task :default => :package
+task :default => :spec

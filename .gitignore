@@ -1,2 +1,11 @@
-pkg
-*.log
+/.bundle/
+/.yardoc
+/Gemfile.lock
+/_yardoc/
+/coverage/
+/doc/
+/pkg/
+/spec/reports/
+/tmp/
+.byebug_history
+/net-irc.log

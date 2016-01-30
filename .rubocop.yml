@@ -1,0 +1,20 @@
+Metrics/LineLength:
+  Max: 120
+
+Metrics/MethodLength:
+  Max: 15
+
+Style/AsciiComments:
+  Enabled: false
+
+Style/Documentation:
+  Enabled: false
+
+Style/FormatString:
+  Enabled: false
+
+Style/SignalException:
+  EnforcedStyle: only_raise
+
+Lint/AssignmentInCondition:
+  Enabled: false
